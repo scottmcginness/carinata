@@ -1,0 +1,20 @@
+class User(object):
+    @classmethod
+    def create(self, attrs):
+        return True
+
+describe User:
+
+  before "each":
+    self.attr = {
+      'name': "Example User",
+      'email': "user@example.com",
+      'password': "changeme",
+      'password_confirmation': "changeme"
+    }
+
+  it "should create a new instance given a valid attribute":
+    self.assertTrue(User.create(self.attr))
+
+  it "should be an object":
+    self.assertTrue(User == object)
