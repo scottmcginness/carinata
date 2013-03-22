@@ -33,6 +33,10 @@ except ImportError:
 from .utils import identifier_safe, camelify, snakify, create_module_from_string
 
 
+class InvalidLeafError(Exception):
+    pass
+
+
 class Node(list):
     """Representation of a line in a spec file.
 
@@ -47,14 +51,19 @@ class Node(list):
         self.indent = indent
         self.parent = None
         self.processed = False
+        self.valid_leaves = [Node]
 
     def __repr__(self):
         return "<%s: '%s'>" % (self.__class__.__name__, self.words.strip())
 
     def add_leaf(self, obj):
         """Add a child node to this one"""
-        self.append(obj)
-        obj.parent = self
+        if self.valid_leaves is None or type(obj) in self.valid_leaves:
+            self.append(obj)
+            obj.parent = self
+        else:
+            msg = "cannot add %s leaf to a %s node" % (type(obj), type(self))
+            raise InvalidLeafError(msg)
 
     def ancestors(self):
         """Get the parents up to the root node"""
@@ -114,26 +123,37 @@ class Node(list):
 
 class Describe(Node):
     """Representation of a ‘describe’ block"""
-    pass
+    def __init__(self, words, indent=''):
+        super(Describe, self).__init__(words, indent)
+        self.valid_leaves = [Describe, Context, Before, Let, It]
 
 
 class Context(Node):
     """Representation of a ‘context’ block"""
-    pass
+    def __init__(self, words, indent=''):
+        super(Context, self).__init__(words, indent)
+        self.valid_leaves = [Describe, Context, Before, Let, It]
 
 
 class Before(Node):
     """Representation of a ‘before’ block"""
-    pass
+    def __init__(self, words, indent=''):
+        super(Before, self).__init__(words, indent)
+        self.valid_leaves = [Code]
 
 
 class Let(Node):
     """Representation of a ‘let’ block"""
-    pass
+    def __init__(self, words, indent=''):
+        super(Let, self).__init__(words, indent)
+        self.valid_leaves = [Code]
 
 
 class It(Node):
     """Representation of an ‘it’ block"""
+    def __init__(self, words, indent=''):
+        super(It, self).__init__(words, indent)
+        self.valid_leaves = [Code]
 
     def siblings(self):
         """Get all the sibling ‘it’ blocks, including this one"""
@@ -157,6 +177,7 @@ class Code(Node):
     """Representation of a line of code in a spec file"""
     def __init__(self, words, orig_file, orig_line):
         super(Code, self).__init__(words)
+        self.valid_leaves = []
         self.orig_file = orig_file
         self.orig_line = orig_line
 
@@ -177,6 +198,7 @@ class Test(Node):
 
     def __init__(self, words, indent=''):
         super(Test, self).__init__(words, indent)
+        self.valid_leaves = [Describe, Code]
         self.class_names = []
 
     def _class_line(self, ancestors):
