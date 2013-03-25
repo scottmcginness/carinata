@@ -18,6 +18,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
+import ast
 import os
 import re
 import sys
@@ -37,6 +38,19 @@ class InvalidLeafError(Exception):
     pass
 
 
+VALID_CHILDREN = {
+    'test': 'describe code',
+    'describe': 'describe context before let it',
+    'context': 'context before let it',
+    'before': 'code',
+    'let': 'code',
+    'it': 'code',
+    'code': ''
+}
+for parent, children in VALID_CHILDREN.iteritems():
+    VALID_CHILDREN[parent] = children.split()
+
+
 class Node(list):
     """Representation of a line in a spec file.
 
@@ -45,25 +59,46 @@ class Node(list):
     tree and make a unittest.TestCase.
 
     """
-    def __init__(self, words, indent=''):
+    def __init__(self, words, indent='', name=None, orig_file=None, orig_line=None):
         super(Node, self).__init__()
+        self.name = name
         self.words = words
         self.indent = indent
         self.parent = None
         self.processed = False
-        self.valid_leaves = [Node]
+        self.valid_leaves = VALID_CHILDREN[self.name] if self.name else None
+        self.code_lines = []
+        self.orig_file = orig_file
+        self.orig_line = orig_line
 
     def __repr__(self):
         return "<%s: '%s'>" % (self.__class__.__name__, self.words.strip())
 
     def add_leaf(self, obj):
         """Add a child node to this one"""
-        if self.valid_leaves is None or type(obj) in self.valid_leaves:
+        if self.valid_leaves is None or obj.name in self.valid_leaves:
             self.append(obj)
             obj.parent = self
         else:
-            msg = "cannot add %s leaf to a %s node" % (type(obj), type(self))
+            msg = "cannot add %s leaf to a %s node" % (obj.name, self.name)
             raise InvalidLeafError(msg)
+
+    def add_code(self, code_line):
+        """Add some code to this node"""
+        if 'code' in self.valid_leaves:
+            self.code_lines.append(code_line)
+
+    def code(self):
+        return "\n".join(c.words for c in self.code_lines)
+
+    def dedented_code(self):
+        """Get all leaf_class children, stripping the common indentation"""
+        first = True
+        for line in self.code_lines:
+            if first:
+                lstrip = re.search('[^\s]', line.words).start()
+                first = False
+            yield line.words[lstrip:]
 
     def ancestors(self):
         """Get the parents up to the root node"""
@@ -87,7 +122,7 @@ class Node(list):
         """
         yield self
         for node in self:
-            if isinstance(node, Node) and not isinstance(node, leaf_class):
+            if node.name is None or node.name != leaf_class:
                 for subnode in node.descendants(leaf_class):
                     yield subnode
             else:
@@ -102,63 +137,19 @@ class Node(list):
         """
         for node in self:
             for prep_class in prep_classes:
-                if isinstance(node, prep_class):
+                if node.name == prep_class:
                     yield node
 
     def leaves(self, leaf_class):
         """Get all children of type leaf_class within this node"""
         for node in self:
-            if isinstance(node, leaf_class):
+            if node.name == leaf_class:
                 yield node
-
-    def stripped_lines(self, leaf_class):
-        """Get all leaf_class children, stripping the common indentation"""
-        first = True
-        for leaf in self.leaves(leaf_class):
-            if first:
-                lstrip = re.search('[^\s]', leaf.words).start()
-                first = False
-            yield leaf.words[lstrip:]
-
-
-class Describe(Node):
-    """Representation of a ‘describe’ block"""
-    def __init__(self, words, indent=''):
-        super(Describe, self).__init__(words, indent)
-        self.valid_leaves = [Describe, Context, Before, Let, It]
-
-
-class Context(Node):
-    """Representation of a ‘context’ block"""
-    def __init__(self, words, indent=''):
-        super(Context, self).__init__(words, indent)
-        self.valid_leaves = [Describe, Context, Before, Let, It]
-
-
-class Before(Node):
-    """Representation of a ‘before’ block"""
-    def __init__(self, words, indent=''):
-        super(Before, self).__init__(words, indent)
-        self.valid_leaves = [Code]
-
-
-class Let(Node):
-    """Representation of a ‘let’ block"""
-    def __init__(self, words, indent=''):
-        super(Let, self).__init__(words, indent)
-        self.valid_leaves = [Code]
-
-
-class It(Node):
-    """Representation of an ‘it’ block"""
-    def __init__(self, words, indent=''):
-        super(It, self).__init__(words, indent)
-        self.valid_leaves = [Code]
 
     def siblings(self):
         """Get all the sibling ‘it’ blocks, including this one"""
         for node in self.parent:
-            if isinstance(node, It):
+            if node.name == 'it':
                 yield node
 
     def set_up(self, prep_classes):
@@ -173,17 +164,6 @@ class It(Node):
                 yield prep
 
 
-class Code(Node):
-    """Representation of a line of code in a spec file"""
-    def __init__(self, words, orig_file, orig_line):
-        super(Code, self).__init__(words)
-        self.valid_leaves = []
-        self.orig_file = orig_file
-        self.orig_line = orig_line
-
-    def __str__(self):
-        return ">>> %s" % self.words
-
 
 class Test(Node):
     """Representation of an entire spec file.
@@ -195,11 +175,6 @@ class Test(Node):
     CODE_LINE = "        %s\n"
     CALL_BEFORE = "self._set_up_%s()"
     CALL_LET = "self.%s = self._set_up_%s()"
-
-    def __init__(self, words, indent=''):
-        super(Test, self).__init__(words, indent)
-        self.valid_leaves = [Describe, Code]
-        self.class_names = []
 
     def _class_line(self, ancestors):
         """Concatentate ancestor names to form a unittest class name"""
@@ -228,7 +203,7 @@ class Test(Node):
         stream.write(self._class_line(node.ancestors()))
 
     def _write_set_up(self, node, stream,
-            prep_classes=None, leaf_class=Code):
+            prep_classes=None):
         """Write the preparation-style functions to the stream"""
         # Store functions, so they can be called later
         set_up_funcs = []
@@ -236,24 +211,23 @@ class Test(Node):
 
         # Define which nodes are used for preparation
         if prep_classes is None:
-            prep_classes = [Before, Let]
-
+            prep_classes = ['before', 'let']
 
         # Go though all set up functions above this node
         for i, set_up in enumerate(node.set_up(prep_classes)):
             func_name = snakify(set_up.words) + "_%d" % i
 
             # Decide whether this is a before block or a let assignment
-            if isinstance(set_up, Before):
+            if set_up.name == 'before':
                 func_list = set_up_funcs
-            elif isinstance(set_up, Let):
+            elif set_up.name == 'let':
                 func_list = let_funcs
             func_list.append(func_name)
 
             # Put a private set up method on the test class
             stream.write(self._func_line(func_name, is_test=False,
                 is_set_up=True))
-            for code_line in set_up.stripped_lines(leaf_class):
+            for code_line in set_up.dedented_code():
                 stream.write(self._code_line(code_line))
             stream.write("\n")
 
@@ -267,19 +241,20 @@ class Test(Node):
             stream.write(self._code_line(code))
         stream.write("\n")
 
-    def _write_tests(self, node, stream, leaf_class=Code):
+    def _write_tests(self, node, stream):
         """Write the ‘test_*’ functions to the stream"""
         # Bundle up the it blocks
         for test in node.siblings():
             # Write the funtion line and the code
             stream.write(self._func_line(snakify(test.words)))
-            for code_line in test.stripped_lines(leaf_class):
+            for code_line in test.dedented_code():
                 stream.write(self._code_line(code_line))
             stream.write("\n")
         stream.write("\n")
 
     def read_spec_file(self, filepath):
         """Read a spec file into a tree with this node as root"""
+        self.valid_leaves = ['describe', 'code']
         node = self
 
         with open(filepath) as file_to_read:
@@ -291,7 +266,7 @@ class Test(Node):
             if line_match:
                 indent, name, words, rest = line_match.groups()
                 parent = node
-                node = CLASSES[name](words, indent)
+                node = Node(words, indent, name=name)
                 if len(indent) > len(parent.indent):
                     parent.add_leaf(node)
                 else:
@@ -300,23 +275,26 @@ class Test(Node):
                         parent = parent.parent
                     parent.add_leaf(node)
                 if rest and not rest.isspace():
-                    node.add_leaf(Code(rest, filepath, number + offset))
+                    # TODO: Current line is number + offset
+                    node.add_code(Node(rest, filepath, name='code'))
 
             elif not line or line.isspace():
                 offset += 1
             else:
-                node.add_leaf(Code(line, filepath, number + offset))
+                # TODO: Current line is number + offset
+                node.add_code(Node(line, filepath, name='code'))
 
-    def write_unittest_file(self, stream=sys.stdout, leaf_class=Code):
+    def write_unittest_file(self, stream=sys.stdout, leaf_class='code'):
         """Write a unittest into the stream"""
+        self.class_names = []
+
         # Write top level code (usually just imports)
         stream.write("import unittest\n\n")
-        for node in self.leaves(Code):
-            stream.write(node.words + "\n")
+        stream.write(self.code())
         stream.write("\n\n")
 
         for node in self.descendants(leaf_class):
-            if isinstance(node, It) and not node.parent.processed:
+            if node.name == 'it' and not node.parent.processed:
                 self._write_class(node, stream)
                 self._write_set_up(node, stream)
                 self._write_tests(node, stream)
@@ -326,14 +304,42 @@ class Test(Node):
         stream.write("__all__ = ['%s']\n\n" % ', '.join(self.class_names))
         stream.write("if __name__ == '__main__':\n    unittest.main()\n")
 
+    def create_ast(self):
+        module = ast.Module(body=[])
 
-CLASSES = {
-    'describe': Describe,
-    'context': Context,
-    'before': Before,
-    'let': Let,
-    'it': It,
-}
+        # Import unittest
+        unittest_import = ast.Import(names=[ast.alias(name='unittest', asname=None)])
+        module.body.append(unittest_import)
+
+        # Other top-level code
+        code = ast.parse(self.code()).body
+        module.body.extend(code)
+
+        for node in self.descendants('code'):
+            if node.name == 'it' and not node.parent.processed:
+                cls = self.create_class(node)
+                module.body.append(cls)
+
+        return module
+
+    def create_class(self, node):
+        cls = ast.ClassDef(name=self._class_name(node), body=[])
+
+        setup = self.create_setup(node)
+        cls.body.extend(setup)
+
+        tests = self.create_tests(node)
+        cls.body.extend(tests)
+
+        return cls
+
+    def create_setup(self, node):
+        pass
+
+    def create_tests(self, node):
+        pass
+
+
 
 MATCH = re.compile(r'''
     ^(?P<indent>\s*)                          # whitespace indent
@@ -363,7 +369,7 @@ def main():
         """Create test modules from the spec files in directories"""
         test_modules = {}
         for filename in carinata_files(directories):
-            test = Test('test')
+            test = Test('', name='test')
             test.read_spec_file(filename)
 
             output = StringIO.StringIO()
