@@ -4,17 +4,24 @@ class User(object):
         return True
 
 describe User:
+    let "a": return 3
 
-  before "each":
-    self.attr = {
-      'name': "Example User",
-      'email': "user@example.com",
-      'password': "changeme",
-      'password_confirmation': "changeme"
-    }
+    context "spam":
 
-  it "should create a new instance given a valid attribute":
-    self.assertTrue(User.create(self.attr))
+        before "each":
+            self.attr = {
+              'name': "Example User",
+              'email': "user@example.com",
+              'password': "changeme",
+              'password_confirmation': "changeme"
+            }
 
-  it "should be an object":
-    self.assertTrue(User == object)
+        it "should create a new instance given a valid attribute":
+            self.assertTrue(User.create(self.attr))
+
+        it "should be an object":
+            self.assertTrue(User == object)
+
+    context "foo":
+        it "has a foo":
+            hasattr(self, 'foo')

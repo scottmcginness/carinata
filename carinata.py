@@ -19,6 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 import ast
+import codegen
 import os
 import re
 import sys
@@ -35,6 +36,9 @@ from .utils import identifier_safe, camelify, snakify, create_module_from_string
 
 
 class InvalidLeafError(Exception):
+    pass
+
+class InvalidSetupError(Exception):
     pass
 
 
@@ -128,7 +132,7 @@ class Node(list):
             else:
                 yield node
 
-    def preparatories(self, prep_classes):
+    def preparatories(self):
         """Get all the preparation-style nodes within this node.
 
         For example, returns all ‘before’ and ‘let’ blocks that are direct
@@ -136,9 +140,8 @@ class Node(list):
 
         """
         for node in self:
-            for prep_class in prep_classes:
-                if node.name == prep_class:
-                    yield node
+            if node.name in ['before', 'let']:
+                yield node
 
     def leaves(self, leaf_class):
         """Get all children of type leaf_class within this node"""
@@ -152,7 +155,7 @@ class Node(list):
             if node.name == 'it':
                 yield node
 
-    def set_up(self, prep_classes):
+    def setup(self):
         """Get all the preparation-style nodes that apply to this node.
 
         For example, this will search up the tree from this ‘it’ node, and
@@ -160,7 +163,7 @@ class Node(list):
 
         """
         for parent in self.ancestors():
-            for prep in parent.preparatories(prep_classes):
+            for prep in parent.preparatories():
                 yield prep
 
 
@@ -215,11 +218,12 @@ class Test(Node):
 
         # Go though all set up functions above this node
         for i, set_up in enumerate(node.set_up(prep_classes)):
-            func_name = snakify(set_up.words) + "_%d" % i
+            func_name = snakify(set_up.words)
 
             # Decide whether this is a before block or a let assignment
             if set_up.name == 'before':
                 func_list = set_up_funcs
+                func_name += str(i)
             elif set_up.name == 'let':
                 func_list = let_funcs
             func_list.append(func_name)
@@ -320,10 +324,18 @@ class Test(Node):
                 cls = self.create_class(node)
                 module.body.append(cls)
 
+                node.parent.processed = True
+
         return module
 
     def create_class(self, node):
-        cls = ast.ClassDef(name=self._class_name(node), body=[])
+        ancestor_names = [camelify(n.words) for n in node.ancestors()]
+        class_name = ''.join(reversed(ancestor_names))
+        cls = ast.ClassDef(name=class_name, body=[], decorator_list=[])
+
+        base_class = ast.Attribute(value=ast.Name(id='unittest', ctx=ast.Load()),
+                attr='TestCase', ctx=ast.Load())
+        cls.bases = [base_class]
 
         setup = self.create_setup(node)
         cls.body.extend(setup)
@@ -334,11 +346,70 @@ class Test(Node):
         return cls
 
     def create_setup(self, node):
-        pass
+        # Create a setUp function
+        setup = self.create_setup_def()
+
+        definitions = [setup]
+
+        # Go though all setup functions above this node
+        for i, n in enumerate(node.setup()):
+            func_name = snakify(n.words)
+
+            if n.name == 'before':
+                func_name += "_%d" % i
+                setup_caller = self.create_before_call
+            elif n.name == 'let':
+                setup_caller = self.create_let_call
+            else:
+                msg = "setup nodes must be called 'before' or 'let'"
+                raise InvalidSetupError(msg)
+
+            setup_def = self.create_setup_def("_set_up_%s" % func_name)
+            setup_code = ast.parse("\n".join(n.dedented_code())).body
+
+            setup_def.body.extend(setup_code)
+            definitions.append(setup_def)
+
+            setup_call = setup_caller(func_name)
+            setup.body.append(setup_call)
+
+        return definitions
+
+    def create_setup_def(self, func_name="setUp"):
+        setup = ast.FunctionDef(name=func_name)
+        setup.body = []
+        setup.decorator_list = []
+
+        args = ast.arguments(vararg=None, kwarg=None, defaults=[])
+        args.args = [ast.Name(id="self", ctx=ast.Param())]
+        setup.args = args
+
+        return setup
+
+    def create_before_call(self, func_name):
+        return ast.Expr(value=self._set_up_call(func_name))
+
+    def create_let_call(self, func_name):
+        target = ast.Attribute(value=ast.Name(id='self', ctx=ast.Load()),
+                attr=func_name, ctx=ast.Store())
+        return ast.Assign(targets=[target], value=self._set_up_call(func_name))
+
+    def _set_up_call(self, func_name):
+        func = ast.Attribute(value=ast.Name(id='self', ctx=ast.Load()),
+                attr="_set_up_%s" % func_name, ctx=ast.Load())
+        return ast.Call(func=func, args=[], keywords=[],
+                starargs=None, kwargs=None)
 
     def create_tests(self, node):
-        pass
-
+        tests = []
+        for test in node.siblings():
+            # Write the funtion line and the code
+            func_name = "test_%s" % snakify(test.words)
+            test_def = self.create_setup_def(func_name)
+            test_code = ast.parse("\n".join(test.dedented_code())).body
+            test_def.body.extend(test_code)
+            tests.append(test_def)
+        return tests
 
 
 MATCH = re.compile(r'''
@@ -369,11 +440,14 @@ def main():
         """Create test modules from the spec files in directories"""
         test_modules = {}
         for filename in carinata_files(directories):
-            test = Test('', name='test')
+            test = Test('Test', name='test')
             test.read_spec_file(filename)
 
             output = StringIO.StringIO()
-            test.write_unittest_file(output)
+            dbg()
+            tast = test.create_ast()
+            code = codegen.to_source(tast)
+            # test.write_unittest_file(output)
 
             module_name = os.path.splitext(filename)[0]
             test_modules[module_name] = output
