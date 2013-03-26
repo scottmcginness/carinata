@@ -247,7 +247,7 @@ class SuiteGenerator(object):
 
             output.write(code)
 
-            module_name = os.path.splitext(filename)[0]
+            module_name = os.path.splitext(os.path.basename(filename))[0]
             test_modules[module_name] = output
         return test_modules
 
