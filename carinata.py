@@ -2,7 +2,7 @@
 # coding: utf-8
 """
 carinata: a (rough-scaled) python spec runner.
-Copyright (C) 2013  Scott McGinnes <mcginness.s@gmail.com>
+Copyright (C) 2013  Scott McGinness <mcginness.s@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,7 +18,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
-import ast
 import codegen
 import os
 import re
@@ -32,27 +31,35 @@ except ImportError:
     import StringIO
 
 
-from .utils import identifier_safe, camelify, snakify, create_module_from_string
+from utils import create_module_from_string
+import creator
 
 
 class InvalidLeafError(Exception):
+    """Error caused when node is given a bad child.
+
+    See VALID_CHILDREN for allowable trees.
+    """
     pass
 
-class InvalidSetupError(Exception):
-    pass
+
+def _valid_children():
+    """Create the VALID_CHILREN dict describing allowed trees"""
+    valid_children = {
+        'test': 'describe code',
+        'describe': 'describe context before let it',
+        'context': 'context before let it',
+        'before': 'code',
+        'let': 'code',
+        'it': 'code',
+        'code': ''
+    }
+    for parent, children in valid_children.iteritems():
+        valid_children[parent] = children.split()
+    return valid_children
 
 
-VALID_CHILDREN = {
-    'test': 'describe code',
-    'describe': 'describe context before let it',
-    'context': 'context before let it',
-    'before': 'code',
-    'let': 'code',
-    'it': 'code',
-    'code': ''
-}
-for parent, children in VALID_CHILDREN.iteritems():
-    VALID_CHILDREN[parent] = children.split()
+VALID_CHILDREN = _valid_children()
 
 
 class Node(list):
@@ -63,7 +70,7 @@ class Node(list):
     tree and make a unittest.TestCase.
 
     """
-    def __init__(self, words, indent='', name=None, orig_file=None, orig_line=None):
+    def __init__(self, words, indent='', name=None):
         super(Node, self).__init__()
         self.name = name
         self.words = words
@@ -72,8 +79,6 @@ class Node(list):
         self.processed = False
         self.valid_leaves = VALID_CHILDREN[self.name] if self.name else None
         self.code_lines = []
-        self.orig_file = orig_file
-        self.orig_line = orig_line
 
     def __repr__(self):
         return "<%s: '%s'>" % (self.__class__.__name__, self.words.strip())
@@ -93,16 +98,16 @@ class Node(list):
             self.code_lines.append(code_line)
 
     def code(self):
+        """Newline separated code lines"""
         return "\n".join(c.words for c in self.code_lines)
 
     def dedented_code(self):
         """Get all leaf_class children, stripping the common indentation"""
-        first = True
-        for line in self.code_lines:
-            if first:
-                lstrip = re.search('[^\s]', line.words).start()
-                first = False
-            yield line.words[lstrip:]
+        if not self.code_lines:
+            return ""
+
+        lstrip = re.search(r'[^\s]', self.code_lines[0].words).start()
+        return "\n".join(line.words[lstrip:] for line in self.code_lines)
 
     def ancestors(self):
         """Get the parents up to the root node"""
@@ -168,104 +173,22 @@ class Node(list):
 
 
 
-class Test(Node):
+class TestGenerator(object):
     """Representation of an entire spec file.
 
     This is the main class that creates a unittest from a spec."""
 
-    CLASS_LINE = "class %s(unittest.TestCase):\n"
-    FUNC_LINE = "    def %s%s(self):\n"
-    CODE_LINE = "        %s\n"
-    CALL_BEFORE = "self._set_up_%s()"
-    CALL_LET = "self.%s = self._set_up_%s()"
-
-    def _class_line(self, ancestors):
-        """Concatentate ancestor names to form a unittest class name"""
-        ancestor_names = [camelify(n.words) for n in ancestors]
-        class_name = ''.join(reversed(ancestor_names))
-        self.class_names.append(class_name)
-        return self.CLASS_LINE % class_name
-
-    def _func_line(self, func_name, is_test=True, is_set_up=False):
-        """A function (‘test_*’ or ‘_set_up_*’) within a unittest class"""
-        func_name = identifier_safe(func_name)
-        if is_test:
-            prefix = "test_"
-        elif is_set_up:
-            prefix = "_set_up_"
-        else:
-            prefix = ""
-        return self.FUNC_LINE % (prefix, func_name)
-
-    def _code_line(self, stripped_line):
-        """Create an indented line of code from a pre-stripped line"""
-        return self.CODE_LINE % stripped_line
-
-    def _write_class(self, node, stream):
-        """Write the class line to the stream"""
-        stream.write(self._class_line(node.ancestors()))
-
-    def _write_set_up(self, node, stream,
-            prep_classes=None):
-        """Write the preparation-style functions to the stream"""
-        # Store functions, so they can be called later
-        set_up_funcs = []
-        let_funcs = []
-
-        # Define which nodes are used for preparation
-        if prep_classes is None:
-            prep_classes = ['before', 'let']
-
-        # Go though all set up functions above this node
-        for i, set_up in enumerate(node.set_up(prep_classes)):
-            func_name = snakify(set_up.words)
-
-            # Decide whether this is a before block or a let assignment
-            if set_up.name == 'before':
-                func_list = set_up_funcs
-                func_name += str(i)
-            elif set_up.name == 'let':
-                func_list = let_funcs
-            func_list.append(func_name)
-
-            # Put a private set up method on the test class
-            stream.write(self._func_line(func_name, is_test=False,
-                is_set_up=True))
-            for code_line in set_up.dedented_code():
-                stream.write(self._code_line(code_line))
-            stream.write("\n")
-
-        # Write the main setUp() function, which calls the others
-        stream.write(self._func_line("setUp", is_test=False))
-        for func in set_up_funcs:
-            code = self.CALL_BEFORE % func
-            stream.write(self._code_line(code))
-        for func in let_funcs:
-            code = self.CALL_LET % (func, func)
-            stream.write(self._code_line(code))
-        stream.write("\n")
-
-    def _write_tests(self, node, stream):
-        """Write the ‘test_*’ functions to the stream"""
-        # Bundle up the it blocks
-        for test in node.siblings():
-            # Write the funtion line and the code
-            stream.write(self._func_line(snakify(test.words)))
-            for code_line in test.dedented_code():
-                stream.write(self._code_line(code_line))
-            stream.write("\n")
-        stream.write("\n")
+    def __init__(self):
+        self.node = Node("Test", name="test")
 
     def read_spec_file(self, filepath):
         """Read a spec file into a tree with this node as root"""
-        self.valid_leaves = ['describe', 'code']
-        node = self
+        node = self.node
 
         with open(filepath) as file_to_read:
             contents = file_to_read.read()
 
-        offset = 1
-        for number, line in enumerate(contents.split("\n")):
+        for line in contents.split("\n"):
             line_match = MATCH.match(line)
             if line_match:
                 indent, name, words, rest = line_match.groups()
@@ -279,137 +202,64 @@ class Test(Node):
                         parent = parent.parent
                     parent.add_leaf(node)
                 if rest and not rest.isspace():
-                    # TODO: Current line is number + offset
                     node.add_code(Node(rest, filepath, name='code'))
-
             elif not line or line.isspace():
-                offset += 1
+                continue
             else:
-                # TODO: Current line is number + offset
                 node.add_code(Node(line, filepath, name='code'))
 
-    def write_unittest_file(self, stream=sys.stdout, leaf_class='code'):
-        """Write a unittest into the stream"""
-        self.class_names = []
-
-        # Write top level code (usually just imports)
-        stream.write("import unittest\n\n")
-        stream.write(self.code())
-        stream.write("\n\n")
-
-        for node in self.descendants(leaf_class):
-            if node.name == 'it' and not node.parent.processed:
-                self._write_class(node, stream)
-                self._write_set_up(node, stream)
-                self._write_tests(node, stream)
-
-                node.parent.processed = True
-
-        stream.write("__all__ = ['%s']\n\n" % ', '.join(self.class_names))
-        stream.write("if __name__ == '__main__':\n    unittest.main()\n")
-
     def create_ast(self):
-        module = ast.Module(body=[])
-
-        # Import unittest
-        unittest_import = ast.Import(names=[ast.alias(name='unittest', asname=None)])
-        module.body.append(unittest_import)
-
-        # Other top-level code
-        code = ast.parse(self.code()).body
-        module.body.extend(code)
-
-        for node in self.descendants('code'):
+        """Create AST for this unittest module"""
+        module = creator.module(self.node)
+        for node in self.node.descendants('code'):
             if node.name == 'it' and not node.parent.processed:
-                cls = self.create_class(node)
-                module.body.append(cls)
-
+                klass = creator.klass(node)
+                module.body.append(klass)
                 node.parent.processed = True
-
+        main_runner = creator.main_runner()
+        module.body.append(main_runner)
         return module
 
-    def create_class(self, node):
-        ancestor_names = [camelify(n.words) for n in node.ancestors()]
-        class_name = ''.join(reversed(ancestor_names))
-        cls = ast.ClassDef(name=class_name, body=[], decorator_list=[])
+class SuiteGenerator(object):
+    """Generate a unittest.TestSuite from files in directories"""
 
-        base_class = ast.Attribute(value=ast.Name(id='unittest', ctx=ast.Load()),
-                attr='TestCase', ctx=ast.Load())
-        cls.bases = [base_class]
+    def __init__(self, directories):
+        self.directories = directories
 
-        setup = self.create_setup(node)
-        cls.body.extend(setup)
+    def carinata_files(self):
+        """Get a list of paths to spec files in directories"""
+        for directory in self.directories:
+            for root, _, filenames in os.walk(directory):
+                for filename in filenames:
+                    if os.path.splitext(filename)[1] == ".carinata":
+                        yield os.path.join(root, filename)
 
-        tests = self.create_tests(node)
-        cls.body.extend(tests)
+    def create_test_modules(self):
+        """Create test modules from the spec files in directories"""
+        test_modules = {}
+        for filename in self.carinata_files():
+            test = TestGenerator()
+            test.read_spec_file(filename)
 
-        return cls
+            output = StringIO.StringIO()
+            test_ast = test.create_ast()
+            code = codegen.to_source(test_ast)
 
-    def create_setup(self, node):
-        # Create a setUp function
-        setup = self.create_setup_def()
+            output.write(code)
 
-        definitions = [setup]
+            module_name = os.path.splitext(filename)[0]
+            test_modules[module_name] = output
+        return test_modules
 
-        # Go though all setup functions above this node
-        for i, n in enumerate(node.setup()):
-            func_name = snakify(n.words)
-
-            if n.name == 'before':
-                func_name += "_%d" % i
-                setup_caller = self.create_before_call
-            elif n.name == 'let':
-                setup_caller = self.create_let_call
-            else:
-                msg = "setup nodes must be called 'before' or 'let'"
-                raise InvalidSetupError(msg)
-
-            setup_def = self.create_setup_def("_set_up_%s" % func_name)
-            setup_code = ast.parse("\n".join(n.dedented_code())).body
-
-            setup_def.body.extend(setup_code)
-            definitions.append(setup_def)
-
-            setup_call = setup_caller(func_name)
-            setup.body.append(setup_call)
-
-        return definitions
-
-    def create_setup_def(self, func_name="setUp"):
-        setup = ast.FunctionDef(name=func_name)
-        setup.body = []
-        setup.decorator_list = []
-
-        args = ast.arguments(vararg=None, kwarg=None, defaults=[])
-        args.args = [ast.Name(id="self", ctx=ast.Param())]
-        setup.args = args
-
-        return setup
-
-    def create_before_call(self, func_name):
-        return ast.Expr(value=self._set_up_call(func_name))
-
-    def create_let_call(self, func_name):
-        target = ast.Attribute(value=ast.Name(id='self', ctx=ast.Load()),
-                attr=func_name, ctx=ast.Store())
-        return ast.Assign(targets=[target], value=self._set_up_call(func_name))
-
-    def _set_up_call(self, func_name):
-        func = ast.Attribute(value=ast.Name(id='self', ctx=ast.Load()),
-                attr="_set_up_%s" % func_name, ctx=ast.Load())
-        return ast.Call(func=func, args=[], keywords=[],
-                starargs=None, kwargs=None)
-
-    def create_tests(self, node):
-        tests = []
-        for test in node.siblings():
-            # Write the funtion line and the code
-            func_name = "test_%s" % snakify(test.words)
-            test_def = self.create_setup_def(func_name)
-            test_code = ast.parse("\n".join(test.dedented_code())).body
-            test_def.body.extend(test_code)
-            tests.append(test_def)
-        return tests
+    def create_suite(self):
+        """Main function to create a test suite"""
+        suite = unittest.TestSuite()
+        modules = self.create_test_modules()
+        for module_name, output in modules.iteritems():
+            test = create_module_from_string(module_name, output.getvalue())
+            module_suite = unittest.TestLoader().loadTestsFromModule(test)
+            suite.addTest(module_suite)
+        return suite
 
 
 MATCH = re.compile(r'''
@@ -427,41 +277,12 @@ MATCH = re.compile(r'''
 
 def main():
     """Run a spec file as a unittest"""
-
-    def carinata_files(directories):
-        """Get a list of paths to spec files in directories"""
-        for directory in directories:
-            for root, _, filenames in os.walk(directory):
-                for filename in filenames:
-                    if os.path.splitext(filename)[1] == ".carinata":
-                        yield os.path.join(root, filename)
-
-    def create_test_modules(directories):
-        """Create test modules from the spec files in directories"""
-        test_modules = {}
-        for filename in carinata_files(directories):
-            test = Test('Test', name='test')
-            test.read_spec_file(filename)
-
-            output = StringIO.StringIO()
-            dbg()
-            tast = test.create_ast()
-            code = codegen.to_source(tast)
-            # test.write_unittest_file(output)
-
-            module_name = os.path.splitext(filename)[0]
-            test_modules[module_name] = output
-        return test_modules
-
-    suite = unittest.TestSuite()
     directories = sys.argv[1:]
     if not directories:
         directories = ['./carinata']
-    modules = create_test_modules(directories)
-    for module_name, output in modules.iteritems():
-        test = create_module_from_string(module_name, output.getvalue())
-        module_suite = unittest.TestLoader().loadTestsFromModule(test)
-        suite.addTest(module_suite)
+
+    gen = SuiteGenerator(directories)
+    suite = gen.create_suite()
 
     unittest.TextTestRunner().run(suite)
 
