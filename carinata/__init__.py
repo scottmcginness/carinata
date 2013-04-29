@@ -31,8 +31,8 @@ except ImportError:
     import StringIO
 
 
-from utils import create_module_from_string
-import creator
+from carinata.utils import create_module_from_string
+from carinata import creator
 
 
 class InvalidLeafError(Exception):

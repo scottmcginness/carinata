@@ -2,7 +2,7 @@
 """Functions to create an AST of a unittest module"""
 import ast
 
-from utils import camelify, snakify
+from carinata.utils import camelify, snakify
 
 
 class InvalidSetupError(Exception):
