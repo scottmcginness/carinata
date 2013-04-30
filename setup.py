@@ -3,7 +3,7 @@
 from distutils.core import setup
 
 setup(name='carinata',
-      version='0.1.2',
+      version='0.2.0',
       description='A rough-scaled python spec runner',
       author='Scott McGinness',
       author_email='mcginness.s@gmail.com',

@@ -10,13 +10,13 @@ class InvalidSetupError(Exception):
     pass
 
 
-def module(top_node):
+def module(top_node, test_module, test_class):
     """Create an AST of a generated unittest module"""
     mod = ast.Module(body=[])
 
-    # Import unittest
-    unittest_import = ast.Import(names=[
-        ast.alias(name='unittest', asname=None)])
+    # Import unittest (or specified test class) TestCase
+    unittest_import = ast.ImportFrom(module=test_module, names=[
+        ast.alias(name=test_class, asname=None)], level=0)
     mod.body.append(unittest_import)
 
     # Other top-level code
@@ -25,15 +25,13 @@ def module(top_node):
 
     return mod
 
-def klass(node):
+def klass(node, test_class):
     """Create unittest class containing tests"""
     ancestor_names = [camelify(n.words) for n in node.ancestors()]
     class_name = ''.join(reversed(ancestor_names))
     cls = ast.ClassDef(name=class_name, body=[], decorator_list=[])
+    base_class = ast.Name(id=test_class, ctx=ast.Load())
 
-    base_class = ast.Attribute(
-            value=ast.Name(id='unittest', ctx=ast.Load()),
-            attr='TestCase', ctx=ast.Load())
     cls.bases = [base_class]
     cls.body.extend(setup(node))
     cls.body.extend(tests(node))
@@ -112,7 +110,7 @@ def tests(node):
         test_funcs.append(test_def)
     return test_funcs
 
-def main_runner():
+def main_runner(test_module):
     """Create unittest.main(), protected by __name__ test"""
     name_test = ast.If(test=ast.Compare(
         left=ast.Name(id='__name__', ctx=ast.Load()),
@@ -123,6 +121,9 @@ def main_runner():
             attr='main', ctx=ast.Load())
     main_runner_func = ast.Expr(value=ast.Call(func=main_runner_attr,
         args=[], keywords=[], starargs=None, kwargs=None))
-    name_test.body = [main_runner_func]
+    if test_module:
+        name_test.body = [ast.Pass()]
+    else:
+        name_test.body = [main_runner_func]
     return name_test
 

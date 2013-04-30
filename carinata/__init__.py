@@ -208,23 +208,27 @@ class TestGenerator(object):
             else:
                 node.add_code(Node(line, filepath, name='code'))
 
-    def create_ast(self):
+    def create_ast(self, test_module, test_class):
         """Create AST for this unittest module"""
-        module = creator.module(self.node)
+        module = creator.module(self.node, test_module, test_class)
         for node in self.node.descendants('code'):
             if node.name == 'it' and not node.parent.processed:
-                klass = creator.klass(node)
+                klass = creator.klass(node, test_class)
                 module.body.append(klass)
                 node.parent.processed = True
-        main_runner = creator.main_runner()
+        main_runner = creator.main_runner(test_module)
         module.body.append(main_runner)
         return module
 
 class SuiteGenerator(object):
     """Generate a unittest.TestSuite from files in directories"""
 
-    def __init__(self, directories):
+    def __init__(self, directories, test_class, output_dir=None):
         self.directories = directories
+        test_class_parts = test_class.split('.')
+        self.test_class = test_class_parts[-1]
+        self.test_module = '.'.join(test_class.split('.')[:-1])
+        self.output_dir = output_dir
 
     def carinata_files(self):
         """Get a list of paths to spec files in directories"""
@@ -232,23 +236,28 @@ class SuiteGenerator(object):
             for root, _, filenames in os.walk(directory):
                 for filename in filenames:
                     if os.path.splitext(filename)[1] == ".carinata":
-                        yield os.path.join(root, filename)
+                        yield directory, os.path.join(root, filename)
 
     def create_test_modules(self):
         """Create test modules from the spec files in directories"""
         test_modules = {}
-        for filename in self.carinata_files():
+        for directory, filename in self.carinata_files():
             test = TestGenerator()
             test.read_spec_file(filename)
 
-            output = StringIO.StringIO()
-            test_ast = test.create_ast()
-            code = codegen.to_source(test_ast)
+            if self.output_dir:
+                filename = os.path.relpath(filename, directory)
+                output_path = os.path.join(self.output_dir, filename.replace("carinata", "py"))
+                output = open(output_path, 'w')
+            else:
+                output = StringIO.StringIO()
 
+            test_ast = test.create_ast(self.test_module, self.test_class)
+            code = codegen.to_source(test_ast)
             output.write(code)
 
             module_name = os.path.splitext(os.path.basename(filename))[0]
-            test_modules[module_name] = output
+            test_modules[module_name] = filename if self.output_dir else output
         return test_modules
 
     def create_suite(self):
@@ -275,17 +284,24 @@ MATCH = re.compile(r'''
 ''', re.VERBOSE)
 
 
-def main():
+def main(directories=None, test_class="unittest.TestCase", output_dir=None):
     """Run a spec file as a unittest"""
-    directories = sys.argv[1:]
     if not directories:
-        directories = ['./carinata']
+        directories = ['.']
 
-    gen = SuiteGenerator(directories)
-    suite = gen.create_suite()
+    gen = SuiteGenerator(directories, test_class, output_dir)
 
-    unittest.TextTestRunner().run(suite)
+    if output_dir is None:
+        suite = gen.create_suite()
+        unittest.TextTestRunner().run(suite)
+    else:
+        gen.create_test_modules()
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("directories", action="append")
+    parser.add_argument("--test-class")
+    args = parser.parse_args()
+    main(args.directories, args.test_class)
