@@ -61,6 +61,10 @@ def setup(node):
         setup_definition = setup_def("_set_up_%s" % func_name)
         setup_code = ast.parse(setup_node.dedented_code()).body
 
+        # Single-line ‘let’ can be treated like a lambda, which returns
+        if setup_node.name == 'let' and len(setup_code) == 1 and isinstance(setup_code[0], ast.Expr):
+            setup_code[0] = ast.Return(value=setup_code[0].value)
+
         setup_definition.body.extend(setup_code)
         definitions.append(setup_definition)
 

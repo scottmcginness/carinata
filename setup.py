@@ -10,7 +10,7 @@ def get_packages():
     return packages
 
 setup(name='carinata',
-      version='0.2.1',
+      version='0.3.0',
       description='A rough-scaled python spec runner',
       author='Scott McGinness',
       author_email='mcginness.s@gmail.com',
