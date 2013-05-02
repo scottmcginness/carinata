@@ -144,7 +144,7 @@ class Node(list):
         children of this node.
 
         """
-        for node in self:
+        for node in reversed(self):
             if node.name in ['before', 'let']:
                 yield node
 
@@ -167,9 +167,11 @@ class Node(list):
         yield all ‘before’ and ‘let’ nodes.
 
         """
+        preps = []
         for parent in self.ancestors():
             for prep in parent.preparatories():
-                yield prep
+                preps.append(prep)
+        return reversed(preps)
 
 
 
