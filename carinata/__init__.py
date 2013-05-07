@@ -276,12 +276,9 @@ class SuiteGenerator(object):
 MATCH = re.compile(r'''
     ^(?P<indent>\s*)                          # whitespace indent
     (?P<name>describe|context|before|let|it)  # block name
-    [\s\(]                                    # space or open paren
-    "?                                        # optionally quote
+    \s"                                       # space, then open quote
     (?P<words>[^"]*?)                         # words of description
-    "?                                        # optionally unquote
-    \)?                                       # optionally close paren
-    :                                         # colon ends statement
+    ":                                        # close quote, then end with colon
     \s?(?P<rest>.*)$                          # code at end
 ''', re.VERBOSE)
 
