@@ -1,0 +1,4 @@
+#!/usr/bin/env python
+import carinata
+
+carinata.main_cmdline()
