@@ -96,6 +96,8 @@ class TestGenerator(object):
         structures, setups = self.get_class_and_setups()
 
         self.creator.klass(structures)
+        for block in structures:
+            self.creator.code(block, class_level=True)
         for setup in setups:
             self.creator.part_set_up(setup)
         if setups:

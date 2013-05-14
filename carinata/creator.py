@@ -18,7 +18,6 @@ class Creator(object):
     _call = _8 + "self._set_up_{0}()\n"
     _assign = _8 + "self.{0} = self._set_up_{0}()\n"
     _test = _4 + "def test_{0}(self):\n"
-    _code = _8 + "{0}\n"
 
     def __init__(self, stream):
         """Write each part of a test class into a stream from blocks.
@@ -62,12 +61,13 @@ class Creator(object):
         self.stream.write(self._test.format(name))
         self.code(block)
 
-    def code(self, block):
+    def code(self, block, class_level=False):
         """Write the code contained in block, dedenting where necessary"""
         if not block.code:
             return
         start = LSTRIP.search(block.code[0]).start()
-        lines = [self._code.format(line[start:]) for line in block.code]
+        indent = _4 if class_level else _8
+        lines = [indent + line[start:] + "\n" for line in block.code]
         self.stream.writelines(lines)
         self.line()
 
