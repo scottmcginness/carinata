@@ -198,9 +198,20 @@ def parse_args():
     """Define and parse command line arguments"""
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("directories", action="append")
-    parser.add_argument("-o", "--output-dir", dest="output_dir")
-    parser.add_argument("-g", "--generate", action="store_true", default=False)
+    parser.add_argument("directories", action="append",
+                        help="The list of directories in which to search for"
+                        " spec files (always recursive)")
+
+    parser.add_argument("-o", "--output-dir", dest="output_dir",
+                        help="The directory in which to create output test"
+                        " files (Created in a temporary directory if this"
+                        " argument is not given)")
+
+    parser.add_argument("-g", "--generate", action="store_true", default=False,
+                        help="Only generate test files, do not run them"
+                        " (False by default, so tests will run if this"
+                        " argument is not given)")
+
     return parser.parse_args()
 
 
