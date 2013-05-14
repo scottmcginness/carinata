@@ -31,12 +31,12 @@ from .creator import Creator
 
 
 MATCH = re.compile(r'''
-    ^(?P<indent>\s*)                          # whitespace indent
-    (?P<name>describe|context|before|let|it)  # block name
-    \s"                                       # space, then open quote
-    (?P<words>[^"]*?)                         # words of description
-    ":                                        # close quote, then end with colon
-    \s?(?P<rest>.*)$                          # code at end
+    ^(?P<indent>\s*)   # whitespace indent
+    (?P<name>describe|context|before|after|let|it)  # block name
+    \s"                # space, then open quote
+    (?P<words>[^"]*?)  # words of description
+    ":                 # close quote, then end with colon
+    \s?(?P<rest>.*)$   # code at end
 ''', re.VERBOSE)
 
 
@@ -93,30 +93,36 @@ class TestGenerator(object):
 
     def process_its(self):
         """Process the ‘it’ blocks given the context in the spec file"""
-        structures, setups = self.get_class_and_setups()
+        structures, setups, teardowns = self.split_block_types()
 
         self.creator.klass(structures)
         for block in structures:
             self.creator.code(block, class_level=True)
         for setup in setups:
             self.creator.part_set_up(setup)
+        for teardown in teardowns:
+            self.creator.part_tear_down(teardown)
         if setups:
             self.creator.full_set_up(setups)
+        if teardowns:
+            self.creator.full_tear_down(teardowns)
 
         for it in self.deferred_its:
             self.creator.test(it)
         self.creator.line()
         self.deferred_its = []
 
-    def get_class_and_setups(self):
+    def split_block_types(self):
         """Split the list of blocks into structural and setup code"""
-        structures, setups = [], []
+        structures, setups, teardowns = [], [], []
         for block in self.blocks:
             if block.name in [Block.describe, Block.context]:
                 structures.append(block)
             elif block.name in [Block.before, Block.let]:
                 setups.append(block)
-        return structures, setups
+            elif block.name == Block.after:
+                teardowns.append(block)
+        return structures, setups, teardowns
 
 
 class SuiteGenerator(object):

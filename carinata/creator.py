@@ -15,7 +15,10 @@ class Creator(object):
     _klass = "class Test{0}(TestCase):\n"
     _part_set_up = _4 + "def _set_up_{0}(self):\n"
     _full_set_up = _4 + "def setUp(self):\n"
-    _call = _8 + "self._set_up_{0}()\n"
+    _part_tear_down = _4 + "def _tear_down_{0}(self):\n"
+    _full_tear_down = _4 + "def tearDown(self):\n"
+    _call_set_up = _8 + "self._set_up_{0}()\n"
+    _call_tear_down = _8 + "self._tear_down_{0}()\n"
     _assign = _8 + "self.{0} = self._set_up_{0}()\n"
     _test = _4 + "def test_{0}(self):\n"
 
@@ -37,6 +40,11 @@ class Creator(object):
         self.stream.write(self._part_set_up.format(block.words))
         self.code(block)
 
+    def part_tear_down(self, block):
+        """Write a partial _tear_down_*() defintion with body"""
+        self.stream.write(self._part_tear_down.format(block.words))
+        self.code(block)
+
     def full_set_up(self, blocks):
         """Write the setUp() definition with body"""
         self.stream.write(self._full_set_up)
@@ -47,9 +55,20 @@ class Creator(object):
                 self.assign(block)
         self.line()
 
+    def full_tear_down(self, blocks):
+        """Write the tearDown() definition with body"""
+        self.stream.write(self._full_tear_down)
+        for block in blocks:
+            self.call(block)
+        self.line()
+
     def call(self, block):
         """Write a call to a partial _set_up_*() method"""
-        self.stream.write(self._call.format(block.words))
+        if block.name == Block.before:
+            call = self._call_set_up
+        elif block.name == Block.after:
+            call = self._call_tear_down
+        self.stream.write(call.format(block.words))
 
     def assign(self, block):
         """Write a call to a _set_up_*(), and assign to self.*"""

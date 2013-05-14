@@ -9,14 +9,16 @@ class Block(object):
     describe = 'describe'
     context = 'context'
     before = 'before'
+    after = 'after'
     let = 'let'
     it = 'it'
 
     valid_children = {
         test: [describe],
-        describe: [describe, context, before, let, it],
-        context: [context, before, let, it],
+        describe: [describe, context, before, after, let, it],
+        context: [context, before, after, let, it],
         before: [],
+        after: [],
         let: [],
         it: [],
     }
@@ -30,7 +32,7 @@ class Block(object):
             if self.name == self.let and not rest.startswith('return'):
                 rest = "return (%s)" % rest
             self.code.append(rest)
-        if self.name == self.before:
+        if self.name in [self.before, self.after]:
             self.words += utils.uuid_hex()
 
     def __repr__(self):
