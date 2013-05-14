@@ -10,7 +10,10 @@ from django.core.management.base import BaseCommand
 class Command(BaseCommand):
     args = '<app>'
     option_list = BaseCommand.option_list + (
-        make_option('--generate', action="store_true", default=False),
+        make_option('-g', '--generate', action="store_true", default=False,
+                    help="Only generate test files, do not run them"
+                    " (False by default, so tests will run if this"
+                    " argument is not given)"),
     )
 
     def handle(self, *apps, **options):
