@@ -1,3 +1,3 @@
-from carinata import main
+from . import main
 
-main()
+main_cmdline()

@@ -10,11 +10,10 @@ def get_packages():
     return packages
 
 setup(name='carinata',
-      version='0.3.2',
+      version='0.4.0',
       description='A rough-scaled python spec runner',
       author='Scott McGinness',
       author_email='mcginness.s@gmail.com',
       url='https://github.com/scottmcginness/carinata',
       packages=get_packages(),
-      install_requires=['astor >= 0.2.1']
-     )
+)

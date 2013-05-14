@@ -10,7 +10,7 @@ from django.core.management.base import BaseCommand
 class Command(BaseCommand):
     args = '<app>'
     option_list = BaseCommand.option_list + (
-        make_option('--testclass', default="django.test.TestCase"),
+        make_option('--generate', action="store_true", default=False),
     )
 
     def handle(self, *apps, **options):
@@ -19,8 +19,10 @@ class Command(BaseCommand):
 Please specify at least one app to run specs on.
 """)
             sys.exit(1)
-        test_class = options.get('testclass')
+
+        generate = options.pop('generate')
         for app in apps:
             directories = [os.path.join(app, "spec")]
-            carinata.main(directories, test_class, os.path.join(app, "tests"))
-        call_command('test', app)
+            carinata.main(directories, os.path.join(app, "tests"), generate=True)
+        if not generate:
+            call_command('test', app)
