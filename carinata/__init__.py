@@ -138,7 +138,7 @@ class SuiteGenerator(object):
         self.output_dir = output_dir
         self.force_generation = force_generation
 
-    def carinata_files(self):
+    def spec_files(self):
         """Get a list of paths to spec files in directories"""
         for directory in self.directories:
             for root, _, filenames in os.walk(directory):
@@ -149,7 +149,7 @@ class SuiteGenerator(object):
     def create_test_files(self):
         """Create python test files from the spec files"""
         filepaths = []
-        for input_directory, input_filename in self.carinata_files():
+        for indir, infile in self.spec_files():
             try:
                 with self._get_output(indir, infile) as outfile:
                     test = TestGenerator(infile, outfile)
