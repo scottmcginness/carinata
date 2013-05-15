@@ -133,10 +133,11 @@ class SuiteGenerator(object):
     SUFFIX = ".carinata"
     TEMPDIR = os.path.join(tempfile.gettempdir(), "carinata")
 
-    def __init__(self, directories, output_dir=None, force_generation=False):
+    def __init__(self, directories, output_dir=None, force_generation=False, clean=False):
         self.directories = directories
         self.output_dir = output_dir
         self.force_generation = force_generation
+        self.clean = clean
 
     def spec_files(self):
         """Get a list of paths to spec files in directories"""
@@ -150,8 +151,12 @@ class SuiteGenerator(object):
         """Create python test files from the spec files"""
         filepaths = []
         for indir, infile in self.spec_files():
+            if self.clean:
+                outdir, outfile = self._get_output(indir, infile)
+                os.remove(outfile)
+                continue
             try:
-                with self._get_output(indir, infile) as outfile:
+                with self.output_file(indir, infile) as outfile:
                     test = TestGenerator(infile, outfile)
                     test.process()
                 path = outfile.name
@@ -172,11 +177,6 @@ class SuiteGenerator(object):
         return suite
 
     def _get_output(self, indir, infile):
-        """Get a file-like object for output.
-
-        If an output_dir was given, put the file in there. Otherwise, put it
-        in the temporary directory.
-        """
         outdir = self.output_dir if self.output_dir else self.TEMPDIR
 
         outfile = infile.replace(self.SUFFIX, ".py")
@@ -184,6 +184,15 @@ class SuiteGenerator(object):
                                os.path.relpath(outfile, indir))
         outdir = os.path.dirname(outfile)
 
+        return outdir, outfile
+
+    def output_file(self, indir, infile):
+        """Get a file-like object for output.
+
+        If an output_dir was given, put the file in there. Otherwise, put it
+        in the temporary directory.
+        """
+        outdir, outfile = self._get_output(indir, infile)
         if not os.path.exists(outdir):
             os.makedirs(outdir)
 
@@ -195,7 +204,7 @@ class SuiteGenerator(object):
         return open(outfile, 'w')
 
 
-def main(directories, output_dir, generate, force):
+def main(directories, output_dir, generate, force, clean):
     """Generate and run spec files.
 
     Collect spec files from directories and process them into a test suite.
@@ -203,13 +212,14 @@ def main(directories, output_dir, generate, force):
     structure from each parent directory. If generate is given, only generate
     the files, otherwise run with the usual unittest text runner.
     """
-    generator = SuiteGenerator(directories, output_dir, force)
+    generator = SuiteGenerator(directories, output_dir, force, clean)
 
     if generate:
         generator.create_test_files()
     else:
         suite = generator.create_test_suite()
-        unittest.TextTestRunner().run(suite)
+        if not clean:
+            unittest.TextTestRunner().run(suite)
 
 
 def parse_args():
@@ -235,13 +245,17 @@ def parse_args():
                         " original files have changed or not (False by"
                         " default, so only changed tests are generated)")
 
+    parser.add_argument("-c", "--clean", action="store_true", default=False,
+                        help="Clean up files instead of generating them")
+
     return parser.parse_args()
 
 
 def main_cmdline():
     """Run carinata as main package, taking arguments from sys.argv"""
     args = parse_args()
-    main(args.directories, args.output_dir, args.generate, args.force)
+    main(args.directories, args.output_dir, args.generate, args.force,
+         args.clean)
 
 
 if __name__ == '__main__':

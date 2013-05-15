@@ -18,6 +18,9 @@ class Command(BaseCommand):
                     help="Generate test files regardless of whether"
                     " original files have changed or not (False by"
                     " default, so only changed tests are generated)"),
+        make_option("-c", "--clean", action="store_true", default=False,
+                    help="Clean up files instead of generating them"),
+
     )
 
     def handle(self, *apps, **options):
@@ -29,8 +32,10 @@ Please specify at least one app to run specs on.
 
         generate = options.pop('generate')
         force = options.pop('force')
+        clean = options.pop('clean')
         for app in apps:
             directories = [os.path.join(app, "spec")]
-            carinata.main(directories, os.path.join(app, "tests"), generate=True, force=force)
-        if not generate:
+            carinata.main(directories, os.path.join(app, "tests"),
+                          generate=True, force=force, clean=clean)
+        if not generate and not clean:
             call_command('test', app)
