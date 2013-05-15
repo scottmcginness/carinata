@@ -45,30 +45,32 @@ class TestGenerator(object):
         """Read the contents of a spec file and setup the generator"""
         with open(filepath) as file_to_read:
             contents = file_to_read.read()
+        self.filepath = os.path.abspath(filepath)
         self.creator = Creator(stream)
         self.lines = contents.split("\n")
-        self.blocks = [Block("", Block.test, "")]
+        self.blocks = [Block("", Block.test, "", 0)]
         self.deferred_its = []
 
     def process(self):
         """Do the main processing of the spec file"""
-        for line in self.lines:
+        self.creator.notice(self.filepath)
+        for lineno, line in enumerate(self.lines):
             line_match = MATCH.match(line)
             if line_match:
-                self.process_line_match(line_match)
+                self.process_line_match(lineno+1, line_match)
             elif not line or line.isspace():
                 continue
             else:
-                self.process_code(line)
+                self.process_code(lineno+1, line)
 
-    def process_line_match(self, line_match):
+    def process_line_match(self, lineno, line_match):
         """If the line matched a block, process that block"""
         indent, name, words, rest = line_match.groups()
 
         if name != Block.it and self.deferred_its:
             self.process_its()
 
-        block = Block(indent, name, words, rest)
+        block = Block(indent, name, words, lineno, rest)
 
         if len(self.blocks) != 1 and block.indent <= self.blocks[-1].indent:
             self.blocks = [b for b in self.blocks
@@ -78,14 +80,14 @@ class TestGenerator(object):
         if block.name == Block.it:
             self.defer_it()
 
-    def process_code(self, line):
+    def process_code(self, lineno, line):
         """Write code lines into stream or append to block"""
         if len(self.blocks) == 1:
             # At the top level, so write immediately
-            self.creator.line(line)
+            self.creator.line(line, lineno)
         else:
             # Inside a block, so defer it
-            self.blocks[-1].code.append(line)
+            self.blocks[-1].code.append((lineno, line))
 
     def defer_it(self):
         """Put an ‘it’ block on a list to be bundled into a test class"""
