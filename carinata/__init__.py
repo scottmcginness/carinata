@@ -20,7 +20,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 import os
 import re
-import shutil
 import sys
 import tempfile
 import unittest
@@ -139,11 +138,6 @@ class SuiteGenerator(object):
         self.output_dir = output_dir
         self.force_generation = force_generation
 
-        # If using tempfiles, then ensure dir exists and is empty
-        if not self.output_dir:
-            shutil.rmtree(self.TEMPDIR)
-            os.makedirs(self.TEMPDIR)
-
     def carinata_files(self):
         """Get a list of paths to spec files in directories"""
         for directory in self.directories:
@@ -157,12 +151,14 @@ class SuiteGenerator(object):
         filepaths = []
         for input_directory, input_filename in self.carinata_files():
             try:
-                with self._get_output(input_directory, input_filename) as output:
-                    test = TestGenerator(input_filename, output)
+                with self._get_output(indir, infile) as outfile:
+                    test = TestGenerator(infile, outfile)
                     test.process()
-            except utils.FileHashMatch:
-                continue
-            filepaths.append(output.name)
+                path = outfile.name
+            except utils.FileHashMatch as hash_match:
+                path = hash_match.filename
+            finally:
+                filepaths.append(path)
 
         return filepaths
 
@@ -175,28 +171,28 @@ class SuiteGenerator(object):
             suite.addTest(loader.loadTestsFromModule(test))
         return suite
 
-    def _get_output(self, input_directory, input_filename):
+    def _get_output(self, indir, infile):
         """Get a file-like object for output.
 
         If an output_dir was given, put the file in there. Otherwise, put it
         in the temporary directory.
         """
-        if self.output_dir:
-            output_filename = input_filename.replace(self.SUFFIX, ".py")
-            output_path = os.path.relpath(output_filename, input_directory)
-            output_path = os.path.join(self.output_dir, output_path)
+        outdir = self.output_dir if self.output_dir else self.TEMPDIR
 
-            # Check the hash of the output file and raise exception if it matches
-            # that of the input file
-            if not self.force_generation:
-                utils.check_file_hash(input_filename, output_path)
+        outfile = infile.replace(self.SUFFIX, ".py")
+        outfile = os.path.join(outdir,
+                               os.path.relpath(outfile, indir))
+        outdir = os.path.dirname(outfile)
 
-            return open(output_path, 'w')
-        else:
-            output_filename = input_filename.replace(self.SUFFIX, "_")
-            return tempfile.NamedTemporaryFile(prefix=output_filename,
-                                               suffix=".py", delete=False,
-                                               dir=self.TEMPDIR)
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+
+        # Check the hash of the output file and raise exception if it matches
+        # that of the input file
+        if not self.force_generation:
+            utils.check_file_hash(infile, outfile)
+
+        return open(outfile, 'w')
 
 
 def main(directories, output_dir, generate, force):

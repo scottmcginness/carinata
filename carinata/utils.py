@@ -12,7 +12,12 @@ VALID_IDENTIFIER = ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 class FileHashMatch(Exception):
     """The persisted file has a hash, and it matched the current file hash"""
-    pass
+    fmt = "File {0} matched old file with hash {1}"
+
+    def __init__(self, filename, hash):
+        self.filename = filename
+        self.hash = hash
+        self.message = self.fmt.format(filename, hash)
 
 
 def _camel_safe(name):
@@ -72,9 +77,9 @@ def get_hash_from_first_line(filename):
         return ""
 
 
-def check_file_hash(input_filename, output_path):
+def check_file_hash(input_filename, output_filename):
     current_hash = get_hash_from_filename(input_filename)
-    if os.path.exists(output_path):
-        old_hash = get_hash_from_first_line(output_path)
+    if os.path.exists(output_filename):
+        old_hash = get_hash_from_first_line(output_filename)
         if current_hash == old_hash:
-            raise FileHashMatch(current_hash)
+            raise FileHashMatch(output_filename, current_hash)
