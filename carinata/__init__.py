@@ -45,6 +45,7 @@ class TestGenerator(object):
         """Read the contents of a spec file and setup the generator"""
         with open(filepath) as file_to_read:
             contents = file_to_read.read()
+        self.filehash = utils.get_hash_from_contents(contents)
         self.filepath = os.path.abspath(filepath)
         self.creator = Creator(stream)
         self.lines = contents.split("\n")
@@ -53,6 +54,7 @@ class TestGenerator(object):
 
     def process(self):
         """Do the main processing of the spec file"""
+        self.creator.filehash(self.filehash)
         self.creator.notice(self.filepath)
         for lineno, line in enumerate(self.lines):
             line_match = MATCH.match(line)
@@ -132,9 +134,10 @@ class SuiteGenerator(object):
     SUFFIX = ".carinata"
     TEMPDIR = os.path.join(tempfile.gettempdir(), "carinata")
 
-    def __init__(self, directories, output_dir=None):
+    def __init__(self, directories, output_dir=None, force_generation=False):
         self.directories = directories
         self.output_dir = output_dir
+        self.force_generation = force_generation
 
         # If using tempfiles, then ensure dir exists and is empty
         if not self.output_dir:
@@ -153,9 +156,12 @@ class SuiteGenerator(object):
         """Create python test files from the spec files"""
         filepaths = []
         for input_directory, input_filename in self.carinata_files():
-            with self._get_output(input_directory, input_filename) as output:
-                test = TestGenerator(input_filename, output)
-                test.process()
+            try:
+                with self._get_output(input_directory, input_filename) as output:
+                    test = TestGenerator(input_filename, output)
+                    test.process()
+            except utils.FileHashMatch:
+                continue
             filepaths.append(output.name)
 
         return filepaths
@@ -179,6 +185,12 @@ class SuiteGenerator(object):
             output_filename = input_filename.replace(self.SUFFIX, ".py")
             output_path = os.path.relpath(output_filename, input_directory)
             output_path = os.path.join(self.output_dir, output_path)
+
+            # Check the hash of the output file and raise exception if it matches
+            # that of the input file
+            if not self.force_generation:
+                utils.check_file_hash(input_filename, output_path)
+
             return open(output_path, 'w')
         else:
             output_filename = input_filename.replace(self.SUFFIX, "_")
@@ -187,7 +199,7 @@ class SuiteGenerator(object):
                                                dir=self.TEMPDIR)
 
 
-def main(directories, output_dir, generate):
+def main(directories, output_dir, generate, force):
     """Generate and run spec files.
 
     Collect spec files from directories and process them into a test suite.
@@ -195,7 +207,7 @@ def main(directories, output_dir, generate):
     structure from each parent directory. If generate is given, only generate
     the files, otherwise run with the usual unittest text runner.
     """
-    generator = SuiteGenerator(directories, output_dir)
+    generator = SuiteGenerator(directories, output_dir, force)
 
     if generate:
         generator.create_test_files()
@@ -222,13 +234,18 @@ def parse_args():
                         " (False by default, so tests will run if this"
                         " argument is not given)")
 
+    parser.add_argument("-f", "--force", action="store_true", default=False,
+                        help="Generate test files regardless of whether"
+                        " original files have changed or not (False by"
+                        " default, so only changed tests are generated)")
+
     return parser.parse_args()
 
 
 def main_cmdline():
     """Run carinata as main package, taking arguments from sys.argv"""
     args = parse_args()
-    main(args.directories, args.output_dir, args.generate)
+    main(args.directories, args.output_dir, args.generate, args.force)
 
 
 if __name__ == '__main__':
