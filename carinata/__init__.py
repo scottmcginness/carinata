@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-carinata: a (rough-scaled) python spec runner.
+carinata: a (rough-scaled) python spec generator.
 Copyright (C) 2013  Scott McGinness <mcginness.s@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
