@@ -64,6 +64,10 @@ class TestGenerator(object):
             else:
                 self.process_code(lineno+1, line)
 
+        # Process any leftover deferred it blocks. There should be one
+        # since we usually defer the final it block in any given tree.
+        self.process_its()
+
     def process_line_match(self, lineno, line_match):
         """If the line matched a block, process that block"""
         indent, name, words, rest = line_match.groups()
