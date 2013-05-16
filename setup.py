@@ -9,16 +9,17 @@ def get_packages():
             packages.append(".".join(os.path.split(root)).strip("."))
     return packages
 
-LONG = """\
-Carinata is a python library which transforms spec files into unittest cases.
-It tries to be a bit like RSpec, but for python
+_long_description = """\
+Carinata is a command line tool which transforms spec files into unittest cases.
+It tries to be a bit like RSpec, but for python. It includes a management
+command for Django.
 
 Spec files contain blocks called ``describe``, ``context``, ``before``, ``after``,
 ``let`` and ``it``, which in turn contain pure python. Carinata uses these blocks
 to create a ``TestCase`` corresponding to each ``it`` block, with the setup from
 ``before`` and ``let`` and the teardown from ``after``.
 
-See the `project homepage <https://github.com/scottmcginness/carinata>` on GitHub for more information, but here is an example::
+See the `project homepage`_ on GitHub for more information, but here is an example::
 
     describe "My Awesome class":
         context "with the number 42":
@@ -33,13 +34,14 @@ See the `project homepage <https://github.com/scottmcginness/carinata>` on GitHu
             it "says it":
                 assert self.awesome.say() == "Awesome says 'wow!'"
 
+.. _project homepage: https://github.com/scottmcginness/carinata
 """
 
 
 setup(name='carinata',
-      version='0.10.2',
+      version='0.10.3',
       description='A rough-scaled python spec generator',
-      long_description=LONG,
+      long_description=_long_description,
       author='Scott McGinness',
       author_email='mcginness.s@gmail.com',
       url='https://github.com/scottmcginness/carinata',
