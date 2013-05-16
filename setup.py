@@ -13,12 +13,12 @@ LONG = """\
 Carinata is a python library which transforms spec files into unittest cases.
 It tries to be a bit like RSpec, but for python
 
-Spec files contain blocks called ``describe``, ``context``, ``before`, ``after``,
+Spec files contain blocks called ``describe``, ``context``, ``before``, ``after``,
 ``let`` and ``it``, which in turn contain pure python. Carinata uses these blocks
 to create a ``TestCase`` corresponding to each ``it`` block, with the setup from
 ``before`` and ``let`` and the teardown from ``after``.
 
-See the GitHub project for more information, but here is an example::
+See the `project homepage <https://github.com/scottmcginness/carinata>` on GitHub for more information, but here is an example::
 
     describe "My Awesome class":
         context "with the number 42":
@@ -37,7 +37,7 @@ See the GitHub project for more information, but here is an example::
 
 
 setup(name='carinata',
-      version='0.10.1',
+      version='0.10.2',
       description='A rough-scaled python spec generator',
       long_description=LONG,
       author='Scott McGinness',
