@@ -36,6 +36,12 @@ class Block(object):
         if self.name in [self.before, self.after]:
             self.words += utils.uuid_hex()
 
+    def __eq__(self, other):
+        return self.name == other.name and self.words == other.words
+
+    def __hash__(self):
+        return hash((self.name, self.words))
+
     def __repr__(self):
         return "<%s: %s>" % (self.name, self.words)
 

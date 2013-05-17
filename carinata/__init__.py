@@ -125,7 +125,11 @@ class TestGenerator(object):
         for block in self.blocks:
             if block.name in [Block.describe, Block.context]:
                 structures.append(block)
-            elif block.name in [Block.before, Block.let]:
+            elif block.name == Block.let:
+                if block in setups:
+                    setups.remove(block)
+                setups.append(block)
+            elif block.name == Block.before:
                 setups.append(block)
             elif block.name == Block.after:
                 teardowns.append(block)
