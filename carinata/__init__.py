@@ -161,7 +161,10 @@ class SuiteGenerator(object):
         for indir, infile in self.spec_files():
             if self.clean:
                 outdir, outfile = self._get_output(indir, infile)
-                os.remove(outfile)
+                try:
+                    os.remove(outfile)
+                except OSError:
+                    pass
                 continue
             try:
                 with self.output_file(indir, infile) as outfile:

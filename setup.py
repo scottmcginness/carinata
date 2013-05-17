@@ -39,7 +39,7 @@ See the `project homepage`_ on GitHub for more information, but here is an examp
 
 
 setup(name='carinata',
-      version='0.10.5',
+      version='0.10.6',
       description='A rough-scaled python spec generator',
       long_description=_long_description,
       author='Scott McGinness',
