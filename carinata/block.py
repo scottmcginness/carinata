@@ -29,6 +29,8 @@ class Block(object):
         self.words = words
         self.lineno = lineno
         self.code = []
+        self.decorators = None
+        self.args = "(self)"
         if rest:
             if self.name == self.let and not rest.startswith('return'):
                 rest = "return (%s)" % rest

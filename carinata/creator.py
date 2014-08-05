@@ -28,8 +28,9 @@ class Creator(object):
     _call_set_up = _8 + "self._set_up_{0}()\n"
     _call_tear_down = _8 + "self._tear_down_{0}()\n"
     _assign = _8 + "self.{0} = self._set_up_{0}()\n"
-    _test = _4 + "def test_{0}(self):\n"
+    _test = _4 + "def test_{0}{1}:\n"
     _code = "{0}{1}  # L:{2}\n"
+    _decorator = _4 + "{0}  # L:{1}\n"
 
     def __init__(self, stream):
         """Write each part of a test class into a stream from blocks.
@@ -91,8 +92,11 @@ class Creator(object):
 
     def test(self, block):
         """Write a test_*() method with body"""
+        if block.decorators is not None:
+            decorators = "\n".join(self._decorator.format(d, l) for l, d in block.decorators)
+            self.stream.write(decorators)
         name = snakify(block.words)
-        self.stream.write(self._test.format(name))
+        self.stream.write(self._test.format(name, block.args))
         self.code(block)
 
     def code(self, block, class_level=False):

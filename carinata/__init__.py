@@ -32,10 +32,12 @@ from .creator import Creator
 MATCH = re.compile(r'''
     ^(?P<indent>\s*)   # whitespace indent
     (?P<name>describe|context|before|after|let|it)  # block name
-    \s"                # space, then open quote
-    (?P<words>[^"]*?)  # words of description
-    ":                 # close quote, then end with colon
-    \s?(?P<rest>.*)$   # code at end
+    \s"                                             # space, then open quote
+    (?P<words>[^"]*?)                               # words of description
+    "*                                              # close quote
+    (?P<args>\s?\([^\)]*\))?                        # optional function args
+    :                                               # then end with colon
+    \s?(?P<rest>.*)$                                # code at end
 ''', re.VERBOSE)
 
 
@@ -50,6 +52,7 @@ class TestGenerator(object):
         self.lines = contents.split("\n")
         self.blocks = [Block("", Block.test, "", 0)]
         self.deferred_its = []
+        self.deferred_decorators = []
 
     def process(self):
         """Do the main processing of the spec file"""
@@ -60,7 +63,9 @@ class TestGenerator(object):
             if line_match:
                 self.process_line_match(lineno+1, line_match)
             elif not line or line.isspace():
-                continue
+                self.deferred_decorators = []
+            elif line.lstrip().startswith('@'):
+                self.deferred_decorators.append((lineno+1, line.lstrip()))
             else:
                 self.process_code(lineno+1, line)
 
@@ -70,10 +75,10 @@ class TestGenerator(object):
 
     def process_line_match(self, lineno, line_match):
         """If the line matched a block, process that block"""
-        indent, name, words, rest = line_match.groups()
+        indent, name, words, args, rest = line_match.groups()
 
         if name != Block.it and self.deferred_its:
-            self.process_its()
+            self.process_its(args)
 
         block = Block(indent, name, words, lineno, rest)
 
@@ -83,6 +88,8 @@ class TestGenerator(object):
         self.blocks.append(block)
 
         if block.name == Block.it:
+            if args is not None:
+                block.args = args
             self.defer_it()
 
     def process_code(self, lineno, line):
@@ -93,14 +100,21 @@ class TestGenerator(object):
         else:
             # Inside a block, so defer it
             self.blocks[-1].code.append((lineno, line))
+        self.deferred_decorators = []  # don't accumulate actual decorators
 
     def defer_it(self):
         """Put an ‘it’ block on a list to be bundled into a test class"""
+        self.blocks[-1].decorators = self.deferred_decorators[:]
+        self.deferred_decorators = []
         self.deferred_its.append(self.blocks[-1])
 
-    def process_its(self):
+    def process_its(self, args=None):
         """Process the ‘it’ blocks given the context in the spec file"""
         structures, setups, teardowns = self.split_block_types()
+
+        # This should be the last it block in the list, and we were passed args
+        if args is not None and len(deferred_its == 1):
+            block.args = args
 
         self.creator.klass(structures)
         for block in structures:
@@ -118,6 +132,7 @@ class TestGenerator(object):
             self.creator.test(it)
         self.creator.line()
         self.deferred_its = []
+        self.deferred_decorators = []
 
     def split_block_types(self):
         """Split the list of blocks into structural and setup code"""
