@@ -62,7 +62,7 @@ class TestGenerator(object):
             line_match = MATCH.match(line)
             if line_match:
                 self.process_line_match(lineno+1, line_match)
-            elif not line or line.isspace():
+            elif not line or line.isspace() or line.lstrip().startswith('#'):
                 self.deferred_decorators = []
             elif line.lstrip().startswith('@'):
                 self.deferred_decorators.append((lineno+1, line.lstrip()))
@@ -91,9 +91,13 @@ class TestGenerator(object):
             if args is not None:
                 block.args = args
             self.defer_it()
+        elif self.deferred_decorators:
+            block.decorators = self.deferred_decorators[:]
+            self.deferred_decorators = []
 
     def process_code(self, lineno, line):
         """Write code lines into stream or append to block"""
+        stripped = line.strip()
         if len(self.blocks) == 1:
             # At the top level, so write immediately
             self.creator.line(line, lineno)
@@ -132,7 +136,6 @@ class TestGenerator(object):
             self.creator.test(it)
         self.creator.line()
         self.deferred_its = []
-        self.deferred_decorators = []
 
     def split_block_types(self):
         """Split the list of blocks into structural and setup code"""
@@ -188,8 +191,7 @@ class SuiteGenerator(object):
                 path = outfile.name
             except utils.FileHashMatch as hash_match:
                 path = hash_match.filename
-            finally:
-                filepaths.append(path)
+            filepaths.append(path)
 
         return filepaths
 

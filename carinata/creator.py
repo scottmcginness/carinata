@@ -21,6 +21,7 @@ class Creator(object):
 """
 
     _klass = "class Test{0}(TestCase):\n"
+    _klass_deco = "{0}  # L:{1}\n"
     _part_set_up = _4 + "def _set_up_{0}(self):\n"
     _full_set_up = _4 + "def setUp(self):\n"
     _part_tear_down = _4 + "def _tear_down_{0}(self):\n"
@@ -30,7 +31,7 @@ class Creator(object):
     _assign = _8 + "self.{0} = self._set_up_{0}()\n"
     _test = _4 + "def test_{0}{1}:\n"
     _code = "{0}{1}  # L:{2}\n"
-    _decorator = _4 + "{0}  # L:{1}\n"
+    _decorator = _4 + "{0}  # L:{1}"
 
     def __init__(self, stream):
         """Write each part of a test class into a stream from blocks.
@@ -48,6 +49,9 @@ class Creator(object):
 
     def klass(self, blocks):
         """A class definition line, with name based on names of blocks"""
+        block_decos = (block.decorators or [] for block in blocks)
+        decorators = "\n".join(self._klass_deco.format(d.strip(), l) for decos in block_decos for (l, d) in decos)
+        self.stream.write(decorators)
         name = "".join(camelify(block.words) for block in blocks)
         self.stream.write(self._klass.format(name))
 
