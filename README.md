@@ -295,6 +295,68 @@ NOSE_PLUGINS = ('pinocchio.spec.Spec',)
 Running `./manage.py spec myapp`, and you’ll get lovely colored readable test output.
 
 
+## Decorators ##
+
+You may apply decorators to `describe` and `context` blocks (where they will be applied
+to the generated class) and `it` blocks (where they will be applied to the test method.
+
+For example:
+
+```python
+
+@my_class_helper
+describe "MyClass":
+
+    @my_inner_class_helper
+    context "with some condition":
+
+        @test_method_decorator
+        it "can be tested":
+            assert True
+
+    context "without that condition":
+
+        @test_method_decorator
+        it "can also be tested":
+            assert True
+
+```
+
+which generates two classes with their respective decorators:
+
+```python
+
+@my_class_helper
+@my_inner_class_helper
+class MyClassWithSomeCondition(TestCase):
+    @test_method_decorator
+    def test_can_be_tested(self):
+        assert True
+
+@my_class_helper
+class MyClassWithoutThatCondition(TestCase):
+    @test_method_decorator
+    def test_can_also_be_tested(self):
+        assert True
+
+```
+
+This comes in useful when using features of [mock](http://www.voidspace.org.uk/python/mock/),
+such as `patch`ing. Since this can also change the function signature, you may specify
+a custom set of arguments for your `it` lines, like this:
+
+```python
+
+import mock
+
+describe "Mocking":
+    @mock.patch('my_module.log')
+    it "can be useful" (self, log):
+        assert not log.call_args_list
+
+```
+
+
 ## Authors ##
 
 Scott McGinness
