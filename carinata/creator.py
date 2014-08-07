@@ -31,7 +31,7 @@ class Creator(object):
     _assign = _8 + "self.{0} = self._set_up_{0}()\n"
     _test = _4 + "def test_{0}{1}:\n"
     _code = "{0}{1}  # L:{2}\n"
-    _decorator = _4 + "{0}  # L:{1}"
+    _decorator = _4 + "{0}  # L:{1}\n"
 
     def __init__(self, stream):
         """Write each part of a test class into a stream from blocks.
@@ -50,7 +50,7 @@ class Creator(object):
     def klass(self, blocks):
         """A class definition line, with name based on names of blocks"""
         block_decos = (block.decorators or [] for block in blocks)
-        decorators = "\n".join(self._klass_deco.format(d.strip(), l) for decos in block_decos for (l, d) in decos)
+        decorators = "".join(self._klass_deco.format(d.strip(), l) for decos in block_decos for (l, d) in decos)
         self.stream.write(decorators)
         name = "".join(camelify(block.words) for block in blocks)
         self.stream.write(self._klass.format(name))
@@ -97,7 +97,7 @@ class Creator(object):
     def test(self, block):
         """Write a test_*() method with body"""
         if block.decorators is not None:
-            decorators = "\n".join(self._decorator.format(d, l) for l, d in block.decorators)
+            decorators = "".join(self._decorator.format(d, l) for l, d in block.decorators)
             self.stream.write(decorators)
         name = snakify(block.words)
         self.stream.write(self._test.format(name, block.args))
